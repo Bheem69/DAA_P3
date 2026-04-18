@@ -6,7 +6,7 @@ const rootDir = require("../utils/pathUtil");
 
 const execAsync = promisify(exec);
 const backendDir = path.join(rootDir, "backend");
-const cppSourceFile = path.join(backendDir, "fraudDetection_minimal.cpp");
+const cppSourceFile = path.join(backendDir, "fraudDetection.cpp");
 const exePath = path.join(backendDir, "fraudDetection");
 const filePath = path.join(backendDir, "transactions.txt");
 
