@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraud Detection Dashboard</title>
+    <link href="style.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body class="bg-gray-950 text-gray-200 font-sans overflow-hidden">
+
+<div class="flex h-screen">
+
+    <!-- SIDEBAR -->
+    <aside class="w-52 bg-gray-900 border-r border-gray-800 p-5 flex flex-col">
+        <h1 class="text-xl font-bold mb-8 text-indigo-400">Risk Panel</h1>
+        
+        <nav class="space-y-2 text-sm flex-1">
+            <a id="navDashboard" class="nav-link block py-2 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors cursor-pointer">
+                Dashboard
+            </a>
+            <a id="navTransactions" class="nav-link block py-2 px-3 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer">
+                All Transactions
+            </a>
+            <a id="navFraudAlerts" class="nav-link block py-2 px-3 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer">
+                Fraud Alerts
+            </a>
+        </nav>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 p-6 flex flex-col overflow-hidden">
+        
+        <!-- HEADER -->
+        <div class="flex justify-between items-center mb-6">
+            <h2 id="pageTitle" class="text-2xl font-bold">Dashboard</h2>
+            <button id="generateBtn" class="bg-indigo-600 hover:bg-indigo-700 px-5 py-2 rounded-lg font-semibold shadow-md hover:shadow-lg transition-all">
+                Generate Transactions
+            </button>
+        </div>
+
+        <!-- STATS -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="bg-gray-900 p-5 rounded-xl border border-gray-800 shadow-lg">
+                <p class="text-gray-400 text-xs uppercase tracking-wide">Total</p>
+                <h2 id="totalTx" class="text-3xl font-bold mt-2">0</h2>
+            </div>
+            <div class="bg-gray-900 p-5 rounded-xl border border-gray-800 shadow-lg">
+                <p class="text-gray-400 text-xs uppercase tracking-wide">Fraud</p>
+                <h2 id="fraudTx" class="text-3xl font-bold text-red-400 mt-2">0</h2>
+            </div>
+            <div class="bg-gray-900 p-5 rounded-xl border border-gray-800 shadow-lg">
+                <p class="text-gray-400 text-xs uppercase tracking-wide">Rate</p>
+                <h2 id="fraudRate" class="text-3xl font-bold text-yellow-400 mt-2">0%</h2>
+            </div>
+        </div>
+
+        <!-- DASHBOARD VIEW -->
+        <div id="dashboardView" class="bg-gray-900 rounded-xl border border-gray-800 shadow-xl flex-1 p-6 overflow-y-auto">
+            <h3 class="text-xl font-semibold mb-6">Fraud Detection Dashboard</h3>
+            
+            <!-- Charts -->
+            <div class="grid grid-cols-2 gap-6 mb-6">
+                <div class="bg-gray-800 p-5 rounded-lg border border-gray-700">
+                    <h4 class="font-semibold mb-4 text-center text-gray-300">Transaction Status</h4>
+                    <canvas id="statusPieChart" class="max-h-64"></canvas>
+                </div>
+                <div class="bg-gray-800 p-5 rounded-lg border border-gray-700">
+                    <h4 class="font-semibold mb-4 text-center text-gray-300">Fraud Types</h4>
+                    <canvas id="fraudTypesChart" class="max-h-64"></canvas>
+                </div>
+            </div>
+
+            <!-- Info Cards -->
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="bg-gray-800 p-5 rounded-lg border border-gray-700 hover:border-indigo-500 transition-colors">
+                    <h4 class="font-semibold mb-2 text-indigo-400">Transactions</h4>
+                    <p class="text-sm text-gray-400">View all transactions with detailed information</p>
+                </div>
+                <div class="bg-gray-800 p-5 rounded-lg border border-gray-700 hover:border-red-500 transition-colors">
+                    <h4 class="font-semibold mb-2 text-red-400">Fraud Alerts</h4>
+                    <p class="text-sm text-gray-400">Monitor fraudulent transactions detected</p>
+                </div>
+                <div class="bg-gray-800 p-5 rounded-lg border border-gray-700 hover:border-emerald-500 transition-colors">
+                    <h4 class="font-semibold mb-2 text-emerald-400">Search</h4>
+                    <p class="text-sm text-gray-400">Find transactions by ID, user, or receiver</p>
+                </div>
+            </div>
+
+            <!-- Algorithms -->
+            <div class="bg-gray-800 p-6 rounded-lg border border-gray-700">
+                <h4 class="font-semibold mb-4 text-gray-300">Detection Algorithms</h4>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div class="flex items-start gap-3">
+                        <span class="text-indigo-400 font-bold">1.</span>
+                        <div>
+                            <p class="font-semibold text-gray-300">Merge Sort - O(n log n)</p>
+                            <p class="text-gray-500">Sorts transactions by timestamp</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-indigo-400 font-bold">2.</span>
+                        <div>
+                            <p class="font-semibold text-gray-300">Binary Search - O(log n)</p>
+                            <p class="text-gray-500">Finds window boundaries efficiently</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-indigo-400 font-bold">3.</span>
+                        <div>
+                            <p class="font-semibold text-gray-300">Sliding Window - O(n)</p>
+                            <p class="text-gray-500">Detects rapid transactions</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-indigo-400 font-bold">4.</span>
+                        <div>
+                            <p class="font-semibold text-gray-300">HashMap - O(n)</p>
+                            <p class="text-gray-500">Tracks daily spending limits</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-indigo-400 font-bold">5.</span>
+                        <div>
+                            <p class="font-semibold text-gray-300">Graph + DFS - O(V + E)</p>
+                            <p class="text-gray-500">Detects fraud rings, hubs, and chains</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TRANSACTIONS VIEW -->
+        <div id="transactionsView" class="hidden bg-gray-900 rounded-xl border border-gray-800 shadow-xl flex-1 flex flex-col overflow-hidden">
+            
+            <!-- Search Bar -->
+            <div class="p-4 border-b border-gray-800">
+                <div class="flex gap-3">
+                    <input type="text" id="searchInput" placeholder="Search by Transaction ID, User ID, or Receiver ID..." 
+                        class="flex-1 bg-gray-800 border border-gray-700 px-4 py-2 rounded-lg focus:border-indigo-500 focus:outline-none text-sm">
+                    <button id="searchBtn" class="bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg font-semibold text-sm transition-all">
+                        Search
+                    </button>
+                    <button id="clearBtn" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-semibold text-sm transition-all">
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="overflow-y-auto flex-1">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead class="bg-gray-800 text-gray-400 sticky top-0">
+                        <tr>
+                            <th class="p-3">Txn ID</th>
+                            <th>User</th>
+                            <th>Receiver</th>
+                            <th>Amount</th>
+                            <th>Timestamp</th>
+                            <th>Status</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionTable" class="divide-y divide-gray-800">
+                        <tr>
+                            <td colspan="7" class="text-center py-12 text-gray-400">No transactions to display</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- FRAUD ALERTS VIEW -->
+        <div id="fraudAlertsView" class="hidden bg-gray-900 rounded-xl border border-gray-800 shadow-xl flex-1 flex flex-col overflow-hidden">
+            
+            <div class="p-4 border-b border-gray-800">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-red-400">Fraud Alerts</h3>
+                    <button id="clearFilterBtn" class="hidden bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm font-semibold transition-all">
+                        Clear Filter
+                    </button>
+                </div>
+                
+                <!-- Fraud Type Filters -->
+                <div class="flex flex-wrap gap-2">
+                    <button class="fraud-filter-btn bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-3 py-2 rounded-lg text-xs font-semibold transition-all" data-reason="Large_transaction">
+                        Large Transaction
+                    </button>
+                    <button class="fraud-filter-btn bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-3 py-2 rounded-lg text-xs font-semibold transition-all" data-reason="Rapid_transactions">
+                        Rapid Transactions
+                    </button>
+                    <button class="fraud-filter-btn bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-3 py-2 rounded-lg text-xs font-semibold transition-all" data-reason="Daily_limit_exceeded">
+                        Daily Limit
+                    </button>
+                    <button class="fraud-filter-btn bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-3 py-2 rounded-lg text-xs font-semibold transition-all" data-reason="Fraud_ring">
+                        Fraud Ring
+                    </button>
+                    <button class="fraud-filter-btn bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-3 py-2 rounded-lg text-xs font-semibold transition-all" data-reason="Fraud_hub">
+                        Fraud Hub
+                    </button>
+                    <button class="fraud-filter-btn bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-3 py-2 rounded-lg text-xs font-semibold transition-all" data-reason="Fraud_chain">
+                        Fraud Chain
+                    </button>
+                </div>
+            </div>
+
+            <div class="overflow-y-auto flex-1">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead class="bg-gray-800 text-gray-400 sticky top-0">
+                        <tr>
+                            <th class="p-3">Txn ID</th>
+                            <th>User</th>
+                            <th>Receiver</th>
+                            <th>Amount</th>
+                            <th>Timestamp</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fraudTable" class="divide-y divide-gray-800">
+                        <tr>
+                            <td colspan="6" class="text-center py-12 text-gray-400">No fraud detected</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
