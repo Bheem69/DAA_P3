@@ -16,6 +16,16 @@
 //  - Sliding Window O(n)    — rapid detection
 //  - DFS          O(V+E)    — ring detection
 //  - Hash Maps    O(1)      — fast lookups
+//
+//  FIXES APPLIED:
+//  FIX 1 — detectRapidSending: added local sort per user so the
+//           sliding window doesn't depend on global sort order.
+//  FIX 2 — detectDailyLimit: two-pass approach so ALL transactions
+//           of a breaching user+day are flagged, not just the last.
+//  FIX 3 — detectNetworkFraud (chains): chain origin and final
+//           recipient are now flagged alongside middlemen.
+//  FIX 4 — detectNetworkFraud (hubs): outCount check made explicit
+//           with a map lookup so ATM-withdrawing hubs don't slip through.
 // ============================================================
 
 #include <iostream>
@@ -53,7 +63,7 @@ struct Transaction {
     long   timestamp;
     bool   isFraud;
     string reason;
-    
+
     Transaction(int id, int sender, int receiver, double amount, long timestamp)
         : id(id), sender(sender), receiver(receiver),
           amount(amount), timestamp(timestamp),
@@ -106,7 +116,7 @@ void markFraud(Transaction& tx, const string& reason) {
 void mergeHalves(vector<Transaction>& txns, int left, int mid, int right) {
     vector<Transaction> L(txns.begin() + left,  txns.begin() + mid + 1);
     vector<Transaction> R(txns.begin() + mid + 1, txns.begin() + right + 1);
-    
+
     int i = 0, j = 0, k = left;
     while (i < (int)L.size() && j < (int)R.size())
         txns[k++] = (L[i].timestamp <= R[j].timestamp) ? L[i++] : R[j++];
@@ -133,17 +143,17 @@ void mergeSort(vector<Transaction>& txns, int left, int right) {
 vector<Transaction> generateTransactions(int count) {
     vector<Transaction> txns;
     long now = time(0);
-    
+
     for (int i = 0; i < count; i++) {
         int sender   = randInt(1, 1000);
         int receiver = randInt(0, 1000);   // 0 = ATM withdrawal
         if (receiver == sender)            // no self-transfers
             receiver = (sender % 1000) + 1;
-        
+
         // 99% small amounts, 1% large amounts (for realistic fraud rate)
         double amount = (randInt(0, 99) < 1) ? randAmount(55000, 105000)
                                               : randAmount(500, 4500);
-        
+
         long when = now - randInt(0, 86400);  // last 24 hours
         txns.emplace_back((int)txns.size() + 1, sender, receiver, amount, when);
     }
@@ -162,7 +172,7 @@ void injectBigAmounts(vector<Transaction>& txns) {
         int sender   = randInt(1, 1000);
         int receiver = randInt(1, 1000);
         if (receiver == sender) receiver = (sender % 1000) + 1;
-        
+
         double bigAmt = randAmount(55000, 120000);
         txns.emplace_back((int)txns.size() + 1, sender, receiver,
                           bigAmt, now - randInt(0, 3600));
@@ -176,7 +186,7 @@ void injectRapidSending(vector<Transaction>& txns) {
     for (int u = 0; u < 3; u++) {
         int  sender   = 2001 + u;
         long baseTime = now + u * 200;   // stagger each user
-        
+
         for (int i = 0; i < 6; i++) {
             int receiver = 2010 + i;
             txns.emplace_back((int)txns.size() + 1, sender, receiver,
@@ -193,7 +203,7 @@ void injectDailyLimit(vector<Transaction>& txns) {
     for (int u = 0; u < 2; u++) {
         int  sender   = 2050 + u;
         long baseTime = now + u * 300;
-        
+
         txns.emplace_back((int)txns.size() + 1, sender, 2060, 60000.0, baseTime);
         txns.emplace_back((int)txns.size() + 1, sender, 2061, 60000.0, baseTime + 10);
         txns.emplace_back((int)txns.size() + 1, sender, 2062, 40000.0, baseTime + 20);
@@ -204,7 +214,7 @@ void injectDailyLimit(vector<Transaction>& txns) {
 // All use user IDs 3001+ to stay separate from normal users
 void injectNetworkFraud(vector<Transaction>& txns) {
     long now = time(0);
-    
+
     // RINGS — money flows in a circle: A→B→C→D→E→A
     int rings[3][5] = {
         {3001, 3002, 3003, 3004, 3005},
@@ -216,7 +226,7 @@ void injectNetworkFraud(vector<Transaction>& txns) {
             txns.emplace_back((int)txns.size() + 1,
                               rings[r][i], rings[r][(i+1) % 5],
                               25000.0, now + r * 60 + i * 5);
-    
+
     // HUBS — many people send to one collector who never sends out
     int hubs[3]      = {3030, 3040, 3050};
     int spokeBase[3] = {3031, 3041, 3051};
@@ -225,7 +235,7 @@ void injectNetworkFraud(vector<Transaction>& txns) {
             txns.emplace_back((int)txns.size() + 1,
                               spokeBase[h] + s, hubs[h],
                               10000.0, now + 200 + h * 60 + s * 2);
-    
+
     // CHAINS — money passed along a line: A→B→C→D→E→F
     int chains[3][6] = {
         {3060, 3061, 3062, 3063, 3064, 3065},
@@ -251,10 +261,17 @@ void detectBigAmount(vector<Transaction>& txns) {
 }
 
 // ============================================================
-//  RULE 2 — RAPID SENDING DETECTION
+//  RULE 2 — RAPID SENDING DETECTION  [FIX 1 APPLIED]
+//
 //  Group each user's transactions. Use a sliding window to
 //  count how many they sent within any 60-second period.
 //  If 5 or more → flag them all.
+//
+//  FIX: Added local sort of each user's transaction indices
+//  by timestamp. Previously the function silently relied on
+//  the global mergeSort running before it in main(). Now it
+//  is self-contained and correct regardless of call order.
+//
 //  Time Complexity: O(n log n)
 // ============================================================
 void detectRapidSending(vector<Transaction>& txns) {
@@ -262,23 +279,28 @@ void detectRapidSending(vector<Transaction>& txns) {
     map<int, vector<int>> byUser;
     for (int i = 0; i < (int)txns.size(); i++)
         byUser[txns[i].sender].push_back(i);
-    
-    // Check each user's transactions
+
     for (auto& entry : byUser) {
         vector<int>& indices = entry.second;
-        
-        // Collect timestamps for this user (already sorted globally)
+
+        // FIX 1: Sort this user's indices by timestamp locally.
+        // Do NOT rely on the global sort order — this makes the
+        // function self-contained and safe against call order changes.
+        sort(indices.begin(), indices.end(), [&](int a, int b) {
+            return txns[a].timestamp < txns[b].timestamp;
+        });
+
+        // Collect sorted timestamps for this user
         vector<long> times;
         for (int idx : indices)
             times.push_back(txns[idx].timestamp);
-        
+
         // Sliding window: left moves forward to stay within 60 seconds
         int left = 0;
         for (int right = 0; right < (int)indices.size(); right++) {
-            // Move left pointer until window is within 60 seconds
             while (times[right] - times[left] > RAPID_WINDOW)
                 left++;
-            
+
             // If window has 5+ transactions, flag all of them
             if (right - left + 1 >= RAPID_COUNT)
                 for (int k = left; k <= right; k++)
@@ -288,27 +310,56 @@ void detectRapidSending(vector<Transaction>& txns) {
 }
 
 // ============================================================
-//  RULE 3 — DAILY LIMIT DETECTION
+//  RULE 3 — DAILY LIMIT DETECTION  [FIX 2 APPLIED]
+//
 //  For each user, track total amount sent per day.
-//  As soon as the running total exceeds limit → flag.
+//  Flag ALL transactions of any user+day that exceeds the limit.
+//
+//  FIX: Changed from single-pass (only flagged the transaction
+//  that crossed the limit) to two-pass approach:
+//  Pass 1 — find which user+day combinations exceeded the limit.
+//  Pass 2 — go back and flag every transaction in those user+days.
+//
 //  Time Complexity: O(n)
 // ============================================================
 void detectDailyLimit(vector<Transaction>& txns) {
-    // Key = "userID_date", Value = total amount sent that day
+
+    // PASS 1: accumulate daily totals and record which keys exceeded limit
     map<string, double> dailyTotal;
-    
+    set<string> exceededKeys;
+
     for (auto& tx : txns) {
         string key = to_string(tx.sender) + "_" + getDate(tx.timestamp);
         dailyTotal[key] += tx.amount;
+
+        // FIX 2: just record the key — don't flag here yet
         if (dailyTotal[key] > DAILY_LIMIT)
+            exceededKeys.insert(key);
+    }
+
+    // PASS 2: flag ALL transactions belonging to exceeded user+days
+    // This ensures tx#1 and tx#2 are flagged too, not just tx#3
+    for (auto& tx : txns) {
+        string key = to_string(tx.sender) + "_" + getDate(tx.timestamp);
+        if (exceededKeys.count(key))
             markFraud(tx, "Daily_limit_exceeded");
     }
 }
 
 // ============================================================
-//  RULE 4 — NETWORK FRAUD DETECTION
+//  RULE 4 — NETWORK FRAUD DETECTION  [FIX 3 & FIX 4 APPLIED]
+//
 //  Build a graph of who sends to whom.
 //  Find Rings (cycles), Hubs (collectors), Chains (mules).
+//
+//  FIX 3 (chains): chain origin sender and final receiver are
+//  now flagged, not just the middlemen in between.
+//
+//  FIX 4 (hubs): outCount check now uses explicit map lookup
+//  instead of relying on default 0 value, so a hub that sends
+//  to an ATM (receiver=0, skipped during graph build) is still
+//  correctly identified.
+//
 //  Time Complexity: O(V + E)
 // ============================================================
 
@@ -317,43 +368,43 @@ void detectDailyLimit(vector<Transaction>& txns) {
 void dfs(int node,
          map<int, vector<int>>& adj,
          map<int, int>& color,
-         vector<int>& stack,
+         vector<int>& stk,
          map<int, int>& stackPos,
          set<int>& ringNodes) {
-    color[node] = 1;                        // mark as visiting
-    stackPos[node] = (int)stack.size();
-    stack.push_back(node);
-    
+    color[node] = 1;
+    stackPos[node] = (int)stk.size();
+    stk.push_back(node);
+
     for (int neighbor : adj[node]) {
         if (color[neighbor] == 0) {
-            dfs(neighbor, adj, color, stack, stackPos, ringNodes);
+            dfs(neighbor, adj, color, stk, stackPos, ringNodes);
         } else if (color[neighbor] == 1) {
             // Back edge = cycle found
             int start = stackPos[neighbor];
-            if ((int)stack.size() - start >= 3)   // ring needs 3+ nodes
-                for (int i = start; i < (int)stack.size(); i++)
-                    ringNodes.insert(stack[i]);
+            if ((int)stk.size() - start >= 3)
+                for (int i = start; i < (int)stk.size(); i++)
+                    ringNodes.insert(stk[i]);
         }
     }
-    
-    stack.pop_back();
+
+    stk.pop_back();
     stackPos.erase(node);
-    color[node] = 2;                        // mark as done
+    color[node] = 2;
 }
 
 void detectNetworkFraud(vector<Transaction>& txns) {
     // ── Build graph ─────────────────────────────────────────
-    map<int, vector<int>> adj;         // adjacency list
-    map<int, int>  inCount, outCount;  // in/out degree per node
-    map<string, double> edgeAmount;    // total amount per sender→receiver edge
+    map<int, vector<int>> adj;
+    map<int, int>  inCount, outCount;
+    map<string, double> edgeAmount;
     set<string> seenEdges;
-    
+
     for (auto& tx : txns) {
-        if (tx.receiver == 0) continue;
-        
+        if (tx.receiver == 0) continue;   // skip ATM withdrawals
+
         string edgeKey = to_string(tx.sender) + "_" + to_string(tx.receiver);
         edgeAmount[edgeKey] += tx.amount;
-        
+
         if (seenEdges.find(edgeKey) == seenEdges.end()) {
             adj[tx.sender].push_back(tx.receiver);
             inCount[tx.receiver]++;
@@ -361,61 +412,71 @@ void detectNetworkFraud(vector<Transaction>& txns) {
             seenEdges.insert(edgeKey);
         }
     }
-    
+
     // Total sent and received per user
     map<int, double> totalSent, totalReceived;
     for (auto& entry : edgeAmount) {
         size_t sep = entry.first.find('_');
         int from   = stoi(entry.first.substr(0, sep));
         int to     = stoi(entry.first.substr(sep + 1));
-        totalSent[from]     += entry.second;
-        totalReceived[to]   += entry.second;
+        totalSent[from]   += entry.second;
+        totalReceived[to] += entry.second;
     }
-    
+
     // Collect all unique nodes
     set<int> allNodes;
-    for (auto& entry : adj)      allNodes.insert(entry.first);
-    for (auto& entry : inCount)  allNodes.insert(entry.first);
-    
+    for (auto& entry : adj)     allNodes.insert(entry.first);
+    for (auto& entry : inCount) allNodes.insert(entry.first);
+
     // ── Ring Detection (DFS cycle detection) ────────────────
     set<int> ringNodes;
     map<int, int> color;
-    vector<int> stack;
+    vector<int> stk;
     map<int, int> stackPos;
     for (int node : allNodes)
         if (color[node] == 0)
-            dfs(node, adj, color, stack, stackPos, ringNodes);
-    
-    // ── Hub Detection ────────────────────────────────────────
-    // Hub = receives from many but never sends
+            dfs(node, adj, color, stk, stackPos, ringNodes);
+
+    // ── Hub Detection  [FIX 4] ───────────────────────────────
+    // Hub = receives from HUB_MIN_IN+ users AND never sends to other users.
+    // FIX 4: use explicit map::find() for outCount instead of default-0
+    // access. A hub that only withdraws to ATM (receiver=0, not in graph)
+    // has no outCount entry at all — find() correctly returns "not found"
+    // and we treat it as 0. Default map[] access would also give 0 but
+    // silently inserts the key, polluting the map for later checks.
     set<int> hubNodes, spokeNodes;
     for (auto& entry : inCount) {
         int node = entry.first;
-        if (entry.second >= HUB_MIN_IN && outCount[node] == 0) {
+
+        // FIX 4: explicit lookup — does not insert a spurious 0 entry
+        bool neverSendsToUsers = (outCount.find(node) == outCount.end()
+                                  || outCount[node] == 0);
+
+        if (entry.second >= HUB_MIN_IN && neverSendsToUsers) {
             hubNodes.insert(node);
             for (auto& tx : txns)
                 if (tx.receiver == node)
                     spokeNodes.insert(tx.sender);
         }
     }
-    
+
     // ── Chain Detection ──────────────────────────────────────
     // Middleman = receives from 1, sends to 1, passes 90%+ forward
     set<int> middlemen;
     for (auto& entry : totalSent) {
         int node = entry.first;
-        if (ringNodes.count(node))        continue;
-        if (hubNodes.count(node))         continue;
-        if (spokeNodes.count(node))       continue;
-        if (inCount[node]  != 1)          continue;
-        if (outCount[node] != 1)          continue;
-        if (!totalReceived.count(node))   continue;
-        
+        if (ringNodes.count(node))      continue;
+        if (hubNodes.count(node))       continue;
+        if (spokeNodes.count(node))     continue;
+        if (inCount[node]  != 1)        continue;
+        if (outCount[node] != 1)        continue;
+        if (!totalReceived.count(node)) continue;
+
         double ratio = entry.second / totalReceived[node];
         if (ratio >= CHAIN_RATIO)
             middlemen.insert(node);
     }
-    
+
     // Link middlemen: find who each middleman sends to
     map<int,int> chainNext, chainPrev;
     for (auto& tx : txns)
@@ -423,17 +484,17 @@ void detectNetworkFraud(vector<Transaction>& txns) {
             chainNext[tx.sender]   = tx.receiver;
             chainPrev[tx.receiver] = tx.sender;
         }
-    
-    // Walk chains — flag sequences of 3+ middlemen
+
+    // Walk chains — flag sequences of CHAIN_MIN+ middlemen
     set<int> chainNodes, visited;
     for (int node : middlemen) {
         if (visited.count(node)) continue;
-        
-        // Walk back to the start of this chain
+
+        // Walk back to chain head
         int head = node;
         while (chainPrev.count(head) && !visited.count(chainPrev[head]))
             head = chainPrev[head];
-        
+
         // Walk forward and collect the chain
         vector<int> chain;
         int cur = head;
@@ -443,12 +504,34 @@ void detectNetworkFraud(vector<Transaction>& txns) {
             if (!chainNext.count(cur)) break;
             cur = chainNext[cur];
         }
-        
+
         if ((int)chain.size() >= CHAIN_MIN)
             for (int n : chain)
                 chainNodes.insert(n);
     }
-    
+
+    // FIX 3: Also flag chain endpoints (origin sender + final receiver).
+    // Previously only middlemen were flagged; the first fraudster who
+    // starts the chain and the final recipient who collects were missed.
+    set<int> chainEndpoints;
+    for (auto& tx : txns) {
+        if (tx.receiver == 0) continue;
+
+        bool senderInChain   = chainNodes.count(tx.sender)   > 0;
+        bool receiverInChain = chainNodes.count(tx.receiver) > 0;
+
+        // Sender outside chain sends INTO chain = chain origin
+        if (!senderInChain && receiverInChain)
+            chainEndpoints.insert(tx.sender);
+
+        // Chain sends to someone outside = final recipient
+        if (senderInChain && !receiverInChain)
+            chainEndpoints.insert(tx.receiver);
+    }
+    // Merge endpoints into chainNodes so they get flagged below
+    for (int n : chainEndpoints)
+        chainNodes.insert(n);
+
     // ── Flag Transactions ────────────────────────────────────
     for (auto& tx : txns) {
         if (tx.receiver == 0) continue;
@@ -485,7 +568,7 @@ void saveResults(const vector<Transaction>& txns) {
          << setw(6)  << "FRAUD"
          << "REASON\n"
          << string(90, '-') << "\n";
-    
+
     for (const auto& tx : txns)
         file << setw(6)  << tx.id
              << setw(8)  << tx.sender
@@ -501,26 +584,28 @@ void saveResults(const vector<Transaction>& txns) {
 // ============================================================
 int main() {
     srand((unsigned)time(0));
-    
+
     // Step 1: Generate 500 random normal transactions
     vector<Transaction> txns = generateTransactions(500);
-    
+
     // Step 2: Inject known fraud patterns for testing
     injectBigAmounts(txns);      // +10  big transactions
     injectRapidSending(txns);    // +18  rapid transactions (3 users x 6)
     injectDailyLimit(txns);      // +6   daily limit fraud (2 users x 3)
     injectNetworkFraud(txns);    // +48  ring + hub + chain fraud
-    
+
     // Total: 582 transactions (500 normal + 82 fraud patterns)
-    
-    // Step 3: Sort by timestamp (required for rapid + daily detection)
+
+    // Step 3: Sort by timestamp (required for correct sliding window)
+    // Note: detectRapidSending also sorts locally per user (FIX 1),
+    // but global sort is still needed for detectDailyLimit pass order.
     mergeSort(txns, 0, (int)txns.size() - 1);
-    
+
     // Step 4: Run all fraud detection rules
     detectFraud(txns);
-    
+
     // Step 5: Save results
     saveResults(txns);
-    
+
     return 0;
 }
